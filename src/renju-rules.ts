@@ -188,22 +188,12 @@ function isStraightThree(board: Board, stones: Pos[], dr: number, dc: number): b
   // A straight four = 4 in a row with both ends open.
 
   // Check extending after: place stone at (ar, ac), making 4 in a row.
-  // The four would span from stones[0] to (ar, ac).
-  // End before stones[0] is (br, bc) which is empty.
-  // End after (ar, ac) is (ar+dr, ac+dc)
   const aar = ar + dr, aac = ac + dc;
-  const extendAfterOk = inBounds(aar, aac) && board[aar][aac] !== BLACK;
 
   // Check extending before: place stone at (br, bc), making 4 in a row.
   const bbr = br - dr, bbc = bc - dc;
-  const extendBeforeOk = inBounds(bbr, bbc) && board[bbr][bbc] !== BLACK;
 
-  // At least one extension must create a straight four
-  // For extending after: four = stones[0]...(ar,ac), before=(br,bc)=empty, after=(aar,aac)
-  // For extending before: four = (br,bc)...stones[2], before=(bbr,bbc), after=(ar,ac)=empty
-
-  // Additionally, the resulting four's extension to five must not be a forbidden move
-  // For simplicity, we check: does extending create a four with both ends open?
+  // Does extending create a four with both ends open (a "straight four")?
   const afterFour = inBounds(br, bc) && board[br][bc] === EMPTY &&
     inBounds(aar, aac) && board[aar][aac] === EMPTY;
   const beforeFour = inBounds(bbr, bbc) && board[bbr][bbc] === EMPTY &&
@@ -219,17 +209,15 @@ function isStraightThree(board: Board, stones: Pos[], dr: number, dc: number): b
 export function isForbidden(board: Board, r: number, c: number): boolean {
   if (board[r][c] !== EMPTY) return false;
 
-  // First check: does this make exactly 5? If so, it's allowed (winning move).
+  // Check for exact five and overline together — overline is forbidden
+  // even if an exact five exists in another direction.
   board[r][c] = BLACK;
   const hasFive = isExactFive(board, r, c, BLACK);
-  board[r][c] = EMPTY;
-  if (hasFive) return false;
-
-  // Check overline
-  board[r][c] = BLACK;
   const overline = isOverline(board, r, c);
   board[r][c] = EMPTY;
+
   if (overline) return true;
+  if (hasFive) return false;
 
   // Check double-four
   if (countFours(board, r, c) >= 2) return true;

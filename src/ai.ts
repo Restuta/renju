@@ -66,7 +66,7 @@ export function findBestMove(
 
   // Fallback: pick any empty cell near existing stones
   if (bestMove[0] === -1) {
-    bestMove = fallbackMove(board);
+    bestMove = fallbackMove(board, player);
   }
 
   return bestMove;
@@ -166,8 +166,8 @@ function alphaBeta(board: Board, player: Stone, depth: number, alpha: number, be
     }
   }
 
-  // Store in transposition table (limit size to avoid memory issues)
-  if (transTable.size < 500_000) {
+  // Store in transposition table (capped to limit memory on mobile)
+  if (transTable.size < 100_000) {
     transTable.set(key, { depth, score: bestScore, flag, bestMove });
   }
 
@@ -361,25 +361,49 @@ function analyzeLineFrom(
   return { length, openEnds };
 }
 
+// Zobrist hashing table for compact, incremental-ready board keys
+const ZOBRIST_TABLE: number[][][] = (() => {
+  const table: number[][][] = [];
+  // Deterministic PRNG (32-bit LCG) for reproducible hashes
+  let seed = 0x12345678;
+  const next32 = () => {
+    seed = (seed * 1664525 + 1013904223) >>> 0;
+    return seed;
+  };
+  for (let r = 0; r < BOARD_SIZE; r++) {
+    const row: number[][] = [];
+    for (let c = 0; c < BOARD_SIZE; c++) {
+      // Two random values per cell: index 0 = BLACK, index 1 = WHITE
+      row.push([next32(), next32()]);
+    }
+    table.push(row);
+  }
+  return table;
+})();
+
 function boardKey(board: Board, player: Stone): string {
-  // Use a compact string representation
-  let key = player === BLACK ? 'B' : 'W';
+  let hash = player === BLACK ? 1 : 2;
   for (let r = 0; r < BOARD_SIZE; r++) {
     for (let c = 0; c < BOARD_SIZE; c++) {
-      key += board[r][c];
+      const stone = board[r][c];
+      if (stone === EMPTY) continue;
+      hash ^= ZOBRIST_TABLE[r][c][stone === BLACK ? 0 : 1];
     }
   }
-  return key;
+  return hash.toString(36);
 }
 
-function fallbackMove(board: Board): Pos {
+function fallbackMove(board: Board, player: Stone): Pos {
   // First: try center
-  if (board[7][7] === EMPTY) return [7, 7];
+  if (board[7][7] === EMPTY && !(player === BLACK && isForbidden(board, 7, 7))) {
+    return [7, 7];
+  }
 
-  // Then: find any empty cell near existing stones
+  // Then: find any empty cell near existing stones, skipping forbidden for Black
   for (let r = 0; r < BOARD_SIZE; r++) {
     for (let c = 0; c < BOARD_SIZE; c++) {
       if (board[r][c] !== EMPTY) continue;
+      if (player === BLACK && isForbidden(board, r, c)) continue;
       for (let dr = -1; dr <= 1; dr++) {
         for (let dc = -1; dc <= 1; dc++) {
           const nr = r + dr, nc = c + dc;

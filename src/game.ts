@@ -62,14 +62,14 @@ export class Game {
   private setupEventListeners(): void {
     // Touch/click on canvas
     this.canvas.addEventListener('click', (e) => this.handleClick(e));
-    this.canvas.addEventListener('touchend', (e) => {
+    this.canvas.addEventListener('touchend', (e: TouchEvent) => {
       e.preventDefault();
       const touch = e.changedTouches[0];
       const rect = this.canvas.getBoundingClientRect();
       const x = touch.clientX - rect.left;
       const y = touch.clientY - rect.top;
       this.handleBoardInput(x, y);
-    });
+    }, { passive: false });
 
     // Buttons
     this.undoBtn.addEventListener('click', () => this.undo());
@@ -154,8 +154,10 @@ export class Game {
     this.state.aiThinking = true;
     this.showStatus('Thinking...');
 
-    // Use requestAnimationFrame + setTimeout to let UI update
-    await new Promise(r => setTimeout(r, 50));
+    // Let UI update before blocking with AI search
+    await new Promise<void>(resolve =>
+      requestAnimationFrame(() => setTimeout(resolve, 50)),
+    );
 
     const aiPlayer = opponent(this.state.playerColor);
     const timeLimits = [500, 1000, 2000, 3000, 5000, 8000];

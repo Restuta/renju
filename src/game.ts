@@ -6,7 +6,7 @@ import {
   Board, BOARD_SIZE, BLACK, WHITE, EMPTY, Stone,
   createBoard, opponent, Pos, posKey, GameState,
 } from './types';
-import { checkWin, getForbiddenMoves, isForbidden } from './renju-rules';
+import { checkWin, getForbiddenMoves, isForbidden, checkOpeningRule } from './renju-rules';
 import { findBestMove } from './ai';
 import { BoardRenderer } from './renderer';
 
@@ -101,6 +101,14 @@ export class Game {
     const [row, col] = pos;
     if (this.state.board[row][col] !== EMPTY) return;
 
+    // Check opening rules (first 3 moves have placement restrictions)
+    const moveNumber = this.state.moveHistory.length + 1;
+    const openingViolation = checkOpeningRule(moveNumber, row, col);
+    if (openingViolation) {
+      this.showStatus(openingViolation);
+      return;
+    }
+
     // Check forbidden move for Black
     if (this.state.currentPlayer === BLACK && isForbidden(this.state.board, row, col)) {
       this.showStatus('Forbidden move! (double-three, double-four, or overline)');
@@ -159,22 +167,60 @@ export class Game {
       requestAnimationFrame(() => setTimeout(resolve, 50)),
     );
 
-    const aiPlayer = opponent(this.state.playerColor);
-    const timeLimits = [500, 1000, 2000, 3000, 5000, 8000];
-    const timeLimit = timeLimits[this.state.difficulty - 1] || 3000;
+    const moveNumber = this.state.moveHistory.length + 1;
+    let row: number, col: number;
 
-    const [row, col] = findBestMove(
-      this.state.board,
-      aiPlayer,
-      this.state.difficulty,
-      timeLimit,
-    );
+    // Opening moves: AI respects placement restrictions
+    if (moveNumber === 1) {
+      // Move 1 (Black): must be center
+      [row, col] = [7, 7];
+    } else if (moveNumber <= 3) {
+      // Moves 2-3: use AI but filter to allowed zone
+      const aiPlayer = opponent(this.state.playerColor);
+      const timeLimits = [500, 1000, 2000, 3000, 5000, 8000];
+      const timeLimit = timeLimits[this.state.difficulty - 1] || 3000;
+
+      [row, col] = findBestMove(this.state.board, aiPlayer, this.state.difficulty, timeLimit);
+
+      // If AI picked outside the allowed zone, pick center-adjacent instead
+      if (checkOpeningRule(moveNumber, row, col) !== null) {
+        const found = this.findOpeningMove(moveNumber);
+        if (found) {
+          [row, col] = found;
+        }
+      }
+    } else {
+      const aiPlayer = opponent(this.state.playerColor);
+      const timeLimits = [500, 1000, 2000, 3000, 5000, 8000];
+      const timeLimit = timeLimits[this.state.difficulty - 1] || 3000;
+
+      [row, col] = findBestMove(this.state.board, aiPlayer, this.state.difficulty, timeLimit);
+    }
 
     this.state.aiThinking = false;
 
     if (row >= 0 && col >= 0) {
       this.makeMove(row, col);
     }
+  }
+
+  /** Find a valid opening move within the allowed zone */
+  private findOpeningMove(moveNumber: number): Pos | null {
+    const radius = moveNumber === 2 ? 1 : 2;
+    const center = 7;
+    // Try cells near center, prefer adjacent to existing stones
+    for (let d = 1; d <= radius; d++) {
+      for (let dr = -d; dr <= d; dr++) {
+        for (let dc = -d; dc <= d; dc++) {
+          if (Math.abs(dr) !== d && Math.abs(dc) !== d) continue; // only outer ring at distance d
+          const r = center + dr, c = center + dc;
+          if (this.state.board[r][c] === EMPTY && checkOpeningRule(moveNumber, r, c) === null) {
+            return [r, c];
+          }
+        }
+      }
+    }
+    return null;
   }
 
   private undo(): void {
@@ -232,7 +278,12 @@ export class Game {
     if (this.state.gameOver) return;
     const turn = this.state.currentPlayer === BLACK ? 'Black' : 'White';
     const isYou = this.state.currentPlayer === this.state.playerColor;
-    this.showStatus(`${turn}'s turn${isYou ? ' (you)' : ''} — Move ${this.state.moveHistory.length + 1}`);
+    const moveNum = this.state.moveHistory.length + 1;
+    let hint = '';
+    if (moveNum === 1) hint = ' [center]';
+    else if (moveNum === 2) hint = ' [3×3 center]';
+    else if (moveNum === 3) hint = ' [5×5 center]';
+    this.showStatus(`${turn}'s turn${isYou ? ' (you)' : ''} — Move ${moveNum}${hint}`);
   }
 
   private showGameOver(winner: Stone): void {

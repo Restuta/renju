@@ -41,6 +41,9 @@ canvas {
 
 .controls {
   margin-top: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 button {
@@ -50,9 +53,11 @@ button {
   padding: 10px 14px;
   border-radius: 8px;
   font-weight: 600;
+  cursor: pointer;
 }
 
 .hint {
+  margin-top: 10px;
   color: #4a4a4a;
   font-size: 0.92rem;
 }

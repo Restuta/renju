@@ -1,9 +1,14 @@
-import { BOARD_SIZE, getCandidateMoves, getForbiddenReason, idx, isWin } from "./rules.js";
+import { BOARD_SIZE, getCandidateMoves, getForbiddenReason, idx, isWin, type Board, type Color, type Point } from "./rules";
+
+interface CachedScore {
+  depth: number;
+  score: number;
+}
 
 export class RenjuEngine {
-  table = new Map();
+  private table = new Map<string, CachedScore>();
 
-  findBestMove(board, depth = 2) {
+  findBestMove(board: Board, depth = 2): Point {
     const moves = this.orderedMoves(board, 2);
     let best = moves[0] ?? { x: Math.floor(BOARD_SIZE / 2), y: Math.floor(BOARD_SIZE / 2) };
     let bestScore = Number.NEGATIVE_INFINITY;
@@ -12,6 +17,7 @@ export class RenjuEngine {
       const next = board.slice();
       next[idx(m.x, m.y)] = 2;
       if (isWin(next, m.x, m.y, 2)) return m;
+
       const score = -this.negamax(next, depth - 1, Number.NEGATIVE_INFINITY, Number.POSITIVE_INFINITY, 1);
       if (score > bestScore) {
         bestScore = score;
@@ -21,7 +27,7 @@ export class RenjuEngine {
     return best;
   }
 
-  negamax(board, depth, alpha, beta, player) {
+  private negamax(board: Board, depth: number, alpha: number, beta: number, player: Color): number {
     const key = `${player}|${depth}|${board.join("")}`;
     const cached = this.table.get(key);
     if (cached && cached.depth >= depth) return cached.score;
@@ -34,6 +40,7 @@ export class RenjuEngine {
     let best = Number.NEGATIVE_INFINITY;
     for (const m of moves) {
       if (player === 1 && getForbiddenReason(board, m.x, m.y)) continue;
+
       const next = board.slice();
       next[idx(m.x, m.y)] = player;
       if (isWin(next, m.x, m.y, player)) return 10000 + depth;
@@ -48,7 +55,7 @@ export class RenjuEngine {
     return best;
   }
 
-  orderedMoves(board, player) {
+  private orderedMoves(board: Board, player: Color): Point[] {
     const candidates = getCandidateMoves(board);
     return candidates
       .map((m) => ({
@@ -57,15 +64,16 @@ export class RenjuEngine {
       }))
       .sort((a, b) => b.s - a.s)
       .slice(0, 18)
-      .map((x) => x.m);
+      .map((entry) => entry.m);
   }
 
-  localScore(board, x, y, player) {
+  private localScore(board: Board, x: number, y: number, player: Color): number {
     if (board[idx(x, y)] !== 0) return -9999;
+
     const next = board.slice();
     next[idx(x, y)] = player;
 
-    const dirs = [
+    const dirs: ReadonlyArray<readonly [number, number]> = [
       [1, 0],
       [0, 1],
       [1, 1],
@@ -95,14 +103,14 @@ export class RenjuEngine {
       }
       if (nx >= 0 && nx < BOARD_SIZE && ny >= 0 && ny < BOARD_SIZE && next[idx(nx, ny)] === 0) openEnds++;
 
-      const val = run >= 5 ? 5000 : run * run * 10 + openEnds * 8;
-      if (val > best) best = val;
+      const value = run >= 5 ? 5000 : run * run * 10 + openEnds * 8;
+      if (value > best) best = value;
     }
 
     return best;
   }
 
-  evaluate(board, perspective) {
+  private evaluate(board: Board, perspective: Color): number {
     let my = 0;
     let opp = 0;
     for (const m of getCandidateMoves(board)) {

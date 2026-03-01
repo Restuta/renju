@@ -3,11 +3,8 @@ import { RenjuGameState, colorName, moveReasonToMessage } from "./game-state";
 import { BOARD_SIZE, idx, type Color, type Point } from "./rules";
 
 const AI_DEPTH = 2;
-const CANVAS_SIZE = 640;
-const BOARD_PADDING = 34;
-const STEP = (CANVAS_SIZE - BOARD_PADDING * 2) / (BOARD_SIZE - 1);
-const STONE_RADIUS = STEP * 0.42;
-const TAP_RADIUS = STEP * 0.45;
+const BASE_CANVAS_SIZE = 640;
+const BOARD_PADDING_RATIO = 34 / BASE_CANVAS_SIZE;
 const FILE_LABELS = ["A", "B", "C", "D", "E", "F", "G", "H", "J", "K", "L", "M", "N", "O", "P"] as const;
 
 function requireElement<T extends Element>(selector: string): T {
@@ -22,13 +19,13 @@ app.innerHTML = `
     <h1>Renju PWA</h1>
     <p id="status"></p>
     <div class="board-wrap">
-      <canvas id="board" width="${CANVAS_SIZE}" height="${CANVAS_SIZE}"></canvas>
+      <canvas id="board" width="${BASE_CANVAS_SIZE}" height="${BASE_CANVAS_SIZE}"></canvas>
     </div>
     <div class="controls">
       <button id="new-game" type="button">New game</button>
       <button id="toggle-side" type="button">Play as White</button>
     </div>
-    <p class="hint">Black follows Renju forbidden rules (double-three, double-four, overline). AI depth is fixed at ${AI_DEPTH} (max for this app).</p>
+    <p class="hint">Black follows Renju forbidden rules (double-three, double-four, overline). AI depth is fixed at ${AI_DEPTH}.</p>
   </main>
 `;
 
@@ -44,29 +41,68 @@ const toggleSideBtn = requireElement<HTMLButtonElement>("#toggle-side");
 const engine = new RenjuEngine();
 const game = new RenjuGameState({ humanColor: 1 });
 
+let boardPixelSize = BASE_CANVAS_SIZE;
+let boardPadding = boardPixelSize * BOARD_PADDING_RATIO;
+let step = (boardPixelSize - boardPadding * 2) / (BOARD_SIZE - 1);
+let stoneRadius = step * 0.42;
+let tapRadius = step * 0.45;
+
+function updateBoardGeometry(size: number): void {
+  boardPixelSize = size;
+  boardPadding = boardPixelSize * BOARD_PADDING_RATIO;
+  step = (boardPixelSize - boardPadding * 2) / (BOARD_SIZE - 1);
+  stoneRadius = step * 0.42;
+  tapRadius = step * 0.45;
+}
+
+function syncCanvasResolution(): void {
+  const rect = canvas.getBoundingClientRect();
+  const minSide = Math.min(rect.width, rect.height);
+  if (!Number.isFinite(minSide) || minSide < 32) return;
+
+  const cssSize = Math.round(minSide);
+  const dpr = Math.max(1, window.devicePixelRatio || 1);
+
+  const targetWidth = Math.round(cssSize * dpr);
+  const targetHeight = Math.round(cssSize * dpr);
+  if (canvas.width !== targetWidth || canvas.height !== targetHeight) {
+    canvas.width = targetWidth;
+    canvas.height = targetHeight;
+  }
+
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  updateBoardGeometry(cssSize);
+}
+
 function toPixel(n: number): number {
-  return BOARD_PADDING + n * STEP;
+  return boardPadding + n * step;
+}
+
+function snapLine(value: number): number {
+  return Math.round(value) + 0.5;
 }
 
 function drawGrid(): void {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.clearRect(0, 0, boardPixelSize, boardPixelSize);
   ctx.fillStyle = "#f4e3b2";
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.fillRect(0, 0, boardPixelSize, boardPixelSize);
 
   ctx.strokeStyle = "#5c4120";
   ctx.lineWidth = 1;
+  const start = snapLine(toPixel(0));
+  const end = snapLine(toPixel(BOARD_SIZE - 1));
 
   for (let i = 0; i < BOARD_SIZE; i++) {
-    const p = toPixel(i);
+    const p = snapLine(toPixel(i));
 
     ctx.beginPath();
-    ctx.moveTo(toPixel(0), p);
-    ctx.lineTo(toPixel(BOARD_SIZE - 1), p);
+    ctx.moveTo(start, p);
+    ctx.lineTo(end, p);
     ctx.stroke();
 
     ctx.beginPath();
-    ctx.moveTo(p, toPixel(0));
-    ctx.lineTo(p, toPixel(BOARD_SIZE - 1));
+    ctx.moveTo(p, start);
+    ctx.lineTo(p, end);
     ctx.stroke();
   }
 
@@ -75,7 +111,7 @@ function drawGrid(): void {
   for (const y of stars) {
     for (const x of stars) {
       ctx.beginPath();
-      ctx.arc(toPixel(x), toPixel(y), STEP * 0.09, 0, Math.PI * 2);
+      ctx.arc(toPixel(x), toPixel(y), step * 0.09, 0, Math.PI * 2);
       ctx.fill();
     }
   }
@@ -92,11 +128,11 @@ function drawCoordinates(): void {
     const file = FILE_LABELS[i];
     const rank = String(BOARD_SIZE - i);
 
-    ctx.fillText(file, p, BOARD_PADDING * 0.42);
-    ctx.fillText(file, p, canvas.height - BOARD_PADDING * 0.42);
+    ctx.fillText(file, p, boardPadding * 0.42);
+    ctx.fillText(file, p, boardPixelSize - boardPadding * 0.42);
 
-    ctx.fillText(rank, BOARD_PADDING * 0.42, p);
-    ctx.fillText(rank, canvas.width - BOARD_PADDING * 0.42, p);
+    ctx.fillText(rank, boardPadding * 0.42, p);
+    ctx.fillText(rank, boardPixelSize - boardPadding * 0.42, p);
   }
 }
 
@@ -112,13 +148,13 @@ function drawForbiddenMarkers(): void {
     ctx.lineWidth = 2;
 
     ctx.beginPath();
-    ctx.moveTo(pX - STEP * 0.17, pY - STEP * 0.17);
-    ctx.lineTo(pX + STEP * 0.17, pY + STEP * 0.17);
+    ctx.moveTo(pX - step * 0.17, pY - step * 0.17);
+    ctx.lineTo(pX + step * 0.17, pY + step * 0.17);
     ctx.stroke();
 
     ctx.beginPath();
-    ctx.moveTo(pX + STEP * 0.17, pY - STEP * 0.17);
-    ctx.lineTo(pX - STEP * 0.17, pY + STEP * 0.17);
+    ctx.moveTo(pX + step * 0.17, pY - step * 0.17);
+    ctx.lineTo(pX - step * 0.17, pY + step * 0.17);
     ctx.stroke();
   }
 }
@@ -130,7 +166,7 @@ function drawStones(): void {
       if (stone === 0) continue;
 
       ctx.beginPath();
-      ctx.arc(toPixel(x), toPixel(y), STONE_RADIUS, 0, Math.PI * 2);
+      ctx.arc(toPixel(x), toPixel(y), stoneRadius, 0, Math.PI * 2);
       ctx.fillStyle = stone === 1 ? "#111" : "#f8f8f8";
       ctx.fill();
       ctx.strokeStyle = "#333";
@@ -141,6 +177,7 @@ function drawStones(): void {
 }
 
 function draw(): void {
+  syncCanvasResolution();
   drawGrid();
   drawCoordinates();
   drawForbiddenMarkers();
@@ -148,18 +185,19 @@ function draw(): void {
 }
 
 function boardPos(e: PointerEvent): Point | null {
+  syncCanvasResolution();
   const r = canvas.getBoundingClientRect();
-  const px = ((e.clientX - r.left) / r.width) * canvas.width;
-  const py = ((e.clientY - r.top) / r.height) * canvas.height;
+  const px = ((e.clientX - r.left) / r.width) * boardPixelSize;
+  const py = ((e.clientY - r.top) / r.height) * boardPixelSize;
 
-  const x = Math.round((px - BOARD_PADDING) / STEP);
-  const y = Math.round((py - BOARD_PADDING) / STEP);
+  const x = Math.round((px - boardPadding) / step);
+  const y = Math.round((py - boardPadding) / step);
 
   if (x < 0 || x >= BOARD_SIZE || y < 0 || y >= BOARD_SIZE) return null;
 
   const nearestX = toPixel(x);
   const nearestY = toPixel(y);
-  if (Math.abs(px - nearestX) > TAP_RADIUS || Math.abs(py - nearestY) > TAP_RADIUS) return null;
+  if (Math.abs(px - nearestX) > tapRadius || Math.abs(py - nearestY) > tapRadius) return null;
 
   return { x, y };
 }
@@ -245,6 +283,15 @@ toggleSideBtn.addEventListener("click", async () => {
 });
 
 void resetGame(1);
+
+let resizeRaf = 0;
+window.addEventListener("resize", () => {
+  if (resizeRaf) window.cancelAnimationFrame(resizeRaf);
+  resizeRaf = window.requestAnimationFrame(() => {
+    resizeRaf = 0;
+    draw();
+  });
+});
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {

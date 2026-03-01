@@ -43,7 +43,7 @@ export class Game {
   }
 
   private createInitialState(): GameState {
-    const difficulty = parseInt(this.difficultySelect.value) || 4;
+    const difficulty = parseInt(this.difficultySelect.value) || 8;
     const playerColor = parseInt(this.colorSelect.value) as typeof BLACK | typeof WHITE;
     return {
       board: createBoard(),
@@ -177,8 +177,8 @@ export class Game {
     } else if (moveNumber <= 3) {
       // Moves 2-3: use AI but filter to allowed zone
       const aiPlayer = opponent(this.state.playerColor);
-      const timeLimits = [500, 1000, 2000, 3000, 5000, 8000];
-      const timeLimit = timeLimits[this.state.difficulty - 1] || 3000;
+      const timeLimits = [500, 1000, 2000, 3000, 5000, 8000, 12000, 20000];
+      const timeLimit = timeLimits[this.state.difficulty - 1] || 5000;
 
       [row, col] = findBestMove(this.state.board, aiPlayer, this.state.difficulty, timeLimit);
 
@@ -191,8 +191,8 @@ export class Game {
       }
     } else {
       const aiPlayer = opponent(this.state.playerColor);
-      const timeLimits = [500, 1000, 2000, 3000, 5000, 8000];
-      const timeLimit = timeLimits[this.state.difficulty - 1] || 3000;
+      const timeLimits = [500, 1000, 2000, 3000, 5000, 8000, 12000, 20000];
+      const timeLimit = timeLimits[this.state.difficulty - 1] || 5000;
 
       [row, col] = findBestMove(this.state.board, aiPlayer, this.state.difficulty, timeLimit);
     }

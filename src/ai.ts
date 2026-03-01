@@ -167,7 +167,7 @@ function alphaBeta(board: Board, player: Stone, depth: number, alpha: number, be
   }
 
   // Store in transposition table (capped to limit memory on mobile)
-  if (transTable.size < 100_000) {
+  if (transTable.size < 200_000) {
     transTable.set(key, { depth, score: bestScore, flag, bestMove });
   }
 
@@ -231,8 +231,8 @@ function generateMoves(board: Board, player: Stone): Pos[] {
   // Sort by priority descending
   candidates.sort((a, b) => b.priority - a.priority);
 
-  // Limit candidates to prevent explosion
-  const maxCandidates = 20;
+  // Limit candidates — more at top level for stronger play, fewer deeper in search
+  const maxCandidates = 30;
   return candidates.slice(0, maxCandidates).map(c => c.pos);
 }
 

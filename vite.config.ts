@@ -1,8 +1,16 @@
 import { defineConfig } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
+import { execSync } from 'child_process';
+
+const gitHash = execSync('git rev-parse --short HEAD').toString().trim();
+const buildTime = new Date().toISOString();
 
 export default defineConfig({
   base: '/renju/',
+  define: {
+    __BUILD_HASH__: JSON.stringify(gitHash),
+    __BUILD_TIME__: JSON.stringify(buildTime),
+  },
   plugins: [
     VitePWA({
       registerType: 'autoUpdate',

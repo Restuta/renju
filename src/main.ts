@@ -175,11 +175,21 @@ style.textContent = `
     font-size: 11px;
     color: var(--text-muted);
     text-align: center;
-    padding: 6px 20px 16px;
+    padding: 6px 20px 8px;
     max-width: 360px;
     line-height: 1.6;
     letter-spacing: 0.15px;
     animation: fadeUp 0.5s ease-out 0.3s both;
+  }
+
+  .build-info {
+    font-size: 9px;
+    color: #3a3529;
+    text-align: center;
+    padding: 2px 20px 12px;
+    font-family: monospace;
+    letter-spacing: 0.5px;
+    animation: fadeUp 0.5s ease-out 0.35s both;
   }
 
   @keyframes fadeUp {
@@ -246,7 +256,16 @@ app.innerHTML = `
     Black has forbidden moves: double-three, double-four, overline.<br>
     White wins with 5+ in a row. Add to Home Screen for offline play.
   </div>
+  <div class="build-info"></div>
 `;
+
+// Populate build info
+declare const __BUILD_HASH__: string;
+declare const __BUILD_TIME__: string;
+const buildInfo = document.querySelector('.build-info')!;
+const buildDate = new Date(__BUILD_TIME__);
+const formatted = buildDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+buildInfo.textContent = `build ${__BUILD_HASH__} · ${formatted} · depth 1-8 · TT 200k · 30 moves`;
 
 // Start game
 new Game();

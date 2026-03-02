@@ -5,29 +5,113 @@ interface CachedScore {
   score: number;
 }
 
+interface SearchOptions {
+  maxDepth?: number;
+  timeLimitMs?: number;
+}
+
+interface RenjuEngineOptions {
+  now?: () => number;
+}
+
+interface DepthSearchResult {
+  move: Point;
+  completed: boolean;
+}
+
+class SearchTimeoutError extends Error {}
+
 export class RenjuEngine {
   private table = new Map<string, CachedScore>();
+  private readonly now: () => number;
+
+  constructor(options: RenjuEngineOptions = {}) {
+    this.now =
+      options.now ??
+      (() => {
+        if (typeof performance !== "undefined" && typeof performance.now === "function") {
+          return performance.now();
+        }
+        return Date.now();
+      });
+  }
 
   findBestMove(board: Board, depth = 2): Point {
+    return this.searchAtDepth(board, depth).move;
+  }
+
+  findBestMoveIterative(board: Board, options: SearchOptions = {}): Point {
+    const maxDepth = Math.max(1, options.maxDepth ?? 4);
+    const timeLimitMs = Math.max(1, options.timeLimitMs ?? 100);
+    const deadline = this.now() + timeLimitMs;
+
+    let best = this.searchAtDepth(board, 1).move;
+    for (let depth = 2; depth <= maxDepth; depth++) {
+      if (this.now() >= deadline) break;
+
+      const result = this.searchAtDepth(board, depth, deadline);
+      if (!result.completed) break;
+      best = result.move;
+    }
+
+    return best;
+  }
+
+  private throwIfTimedOut(deadline?: number): void {
+    if (deadline !== undefined && this.now() >= deadline) {
+      throw new SearchTimeoutError();
+    }
+  }
+
+  private searchAtDepth(board: Board, depth: number, deadline?: number): DepthSearchResult {
     const moves = this.orderedMoves(board, 2);
     let best = moves[0] ?? { x: Math.floor(BOARD_SIZE / 2), y: Math.floor(BOARD_SIZE / 2) };
     let bestScore = Number.NEGATIVE_INFINITY;
 
-    for (const m of moves) {
-      const next = board.slice();
-      next[idx(m.x, m.y)] = 2;
-      if (isWin(next, m.x, m.y, 2)) return m;
+    try {
+      for (const m of moves) {
+        this.throwIfTimedOut(deadline);
 
-      const score = -this.negamax(next, depth - 1, Number.NEGATIVE_INFINITY, Number.POSITIVE_INFINITY, 1);
-      if (score > bestScore) {
-        bestScore = score;
-        best = m;
+        const next = board.slice();
+        next[idx(m.x, m.y)] = 2;
+        if (isWin(next, m.x, m.y, 2)) {
+          return { move: m, completed: true };
+        }
+
+        const score = -this.negamax(
+          next,
+          depth - 1,
+          Number.NEGATIVE_INFINITY,
+          Number.POSITIVE_INFINITY,
+          1,
+          deadline
+        );
+
+        if (score > bestScore) {
+          bestScore = score;
+          best = m;
+        }
       }
+
+      return { move: best, completed: true };
+    } catch (error) {
+      if (error instanceof SearchTimeoutError) {
+        return { move: best, completed: false };
+      }
+      throw error;
     }
-    return best;
   }
 
-  private negamax(board: Board, depth: number, alpha: number, beta: number, player: Color): number {
+  private negamax(
+    board: Board,
+    depth: number,
+    alpha: number,
+    beta: number,
+    player: Color,
+    deadline?: number
+  ): number {
+    this.throwIfTimedOut(deadline);
+
     const key = `${player}|${depth}|${board.join("")}`;
     const cached = this.table.get(key);
     if (cached && cached.depth >= depth) return cached.score;
@@ -39,13 +123,15 @@ export class RenjuEngine {
 
     let best = Number.NEGATIVE_INFINITY;
     for (const m of moves) {
+      this.throwIfTimedOut(deadline);
+
       if (player === 1 && getForbiddenReason(board, m.x, m.y)) continue;
 
       const next = board.slice();
       next[idx(m.x, m.y)] = player;
       if (isWin(next, m.x, m.y, player)) return 10000 + depth;
 
-      const score = -this.negamax(next, depth - 1, -beta, -alpha, player === 1 ? 2 : 1);
+      const score = -this.negamax(next, depth - 1, -beta, -alpha, player === 1 ? 2 : 1, deadline);
       if (score > best) best = score;
       if (best > alpha) alpha = best;
       if (alpha >= beta) break;

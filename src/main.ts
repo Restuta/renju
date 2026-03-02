@@ -1,8 +1,9 @@
 import { RenjuEngine } from "./engine";
 import { RenjuGameState, colorName, moveReasonToMessage } from "./game-state";
-import { BOARD_SIZE, idx, type Color, type Point } from "./rules";
+import { BOARD_SIZE, idx, type Board, type Color, type Point } from "./rules";
 
-const AI_DEPTH = 2;
+const AI_MAX_DEPTH = 4;
+const AI_TIME_BUDGET_MS = 100;
 const BASE_CANVAS_SIZE = 640;
 const BOARD_PADDING_RATIO = 34 / BASE_CANVAS_SIZE;
 const FILE_LABELS = ["A", "B", "C", "D", "E", "F", "G", "H", "J", "K", "L", "M", "N", "O", "P"] as const;
@@ -25,7 +26,7 @@ app.innerHTML = `
       <button id="new-game" type="button">New game</button>
       <button id="toggle-side" type="button">Play as White</button>
     </div>
-    <p class="hint">Black follows Renju forbidden rules (double-three, double-four, overline). AI depth is fixed at ${AI_DEPTH}.</p>
+    <p class="hint">Black follows Renju forbidden rules (double-three, double-four, overline). AI uses iterative deepening up to depth ${AI_MAX_DEPTH} within ~${AI_TIME_BUDGET_MS}ms.</p>
   </main>
 `;
 
@@ -40,6 +41,14 @@ const toggleSideBtn = requireElement<HTMLButtonElement>("#toggle-side");
 
 const engine = new RenjuEngine();
 const game = new RenjuGameState({ humanColor: 1 });
+const aiAdapter = {
+  findBestMove(board: Board, _depth: number): Point {
+    return engine.findBestMoveIterative(board, {
+      maxDepth: AI_MAX_DEPTH,
+      timeLimitMs: AI_TIME_BUDGET_MS,
+    });
+  },
+};
 
 let boardPixelSize = BASE_CANVAS_SIZE;
 let boardPadding = boardPixelSize * BOARD_PADDING_RATIO;
@@ -226,7 +235,7 @@ async function maybeRunAiTurn(): Promise<void> {
   statusEl.textContent = `AI thinking... (${colorName(game.aiColor)})`;
   await new Promise<void>((resolve) => setTimeout(resolve, 70));
 
-  const result = game.playAIMove(engine, AI_DEPTH);
+  const result = game.playAIMove(aiAdapter, AI_MAX_DEPTH);
   if (!result.ok) {
     statusEl.textContent = `AI move failed: ${result.reason}`;
     return;
